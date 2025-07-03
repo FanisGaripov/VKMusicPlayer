@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VKMusicPlayer</title>
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f1f1f1;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .player {
+            width: 100%;
+            max-width: 400px;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin-bottom: 20px;
+        }
+
+        .cover {
+            width: 100%;
+            height: 300px;
+            background: url('https://example.com/cover.jpg') no-repeat center center;
+            background-size: cover;
+        }
+
+        .info {
+            padding: 15px;
+            text-align: center;
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .artist {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 15px;
+        }
+
+        .controls {
+            display: flex;
+            flex-direction: column;
+            padding: 0 20px 20px;
+        }
+
+        .progress-container {
+            width: 100%;
+            height: 4px;
+            background: #e0e0e0;
+            border-radius: 2px;
+            margin-bottom: 15px;
+            cursor: pointer;
+        }
+
+        .progress {
+            height: 100%;
+            background: #ff4d4d;
+            border-radius: 2px;
+            width: 0%;
+        }
+
+        .time {
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 15px;
+        }
+
+        .buttons {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .play-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: #ff4d4d;
+            border: none;
+            color: white;
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            margin: 0 15px;
+        }
+
+        .prev-btn, .next-btn {
+            background: none;
+            border: none;
+            font-size: 20px;
+            color: #666;
+            cursor: pointer;
+        }
+        img {
+            width: 45px;
+            height: 45px;
+        }
+        .track_list {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgb(0 0 0 / 10%);
+        }
+        .track_item {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+    </style>
+</head>
+<body>
+    {% if url != None %}
+    <div class="player">
+        {% if photo != '[]' %}
+        <div class="cover" style="background-image: url({{ photo[0] }});"></div>
+        {% elif photo == '[]' or photo == None %}
+        <div class="cover">Нет фото</div>
+        {% endif %}
+        <div class="info">
+            <div class="title">{{ title }}</div>
+            <div class="artist">{{ artist }}</div>
+        </div>
+        <div class="controls">
+            <div class="progress-container" id="progress-container">
+                <div class="progress" id="progress"></div>
+            </div>
+            <div class="time">
+                <span id="current-time">0:00</span>
+                <span id="duration">3:45</span>
+            </div>
+            <div class="buttons">
+                <a href="/{{ prev_track_id }}"><button class="prev-btn">⏮</button></a>
+                <button class="play-btn" id="play-btn">▶</button>
+                <a href="/{{ next_track_id }}"><button class="next-btn">⏭</button></a>
+            </div>
+        </div>
+        <video id="player" style="display: none;"></video>
+    </div>
+    <script>
+        const audio = document.getElementById('player');
+        const playBtn = document.getElementById('play-btn');
+        const progress = document.getElementById('progress');
+        const progressContainer = document.getElementById('progress-container');
+        const currentTimeEl = document.getElementById('current-time');
+        const durationEl = document.getElementById('duration');
+
+        const hlsUrl = "{{ url }}"; // Замените на свой URL HLS
+        console.info(hlsUrl);
+
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(hlsUrl);
+            hls.attachMedia(audio);
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                console.error('Ошибка:', data);
+            });
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+            audio.src = hlsUrl;
+        }
+
+        playBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                audio.play();
+                playBtn.textContent = '❚❚';
+            } else {
+                audio.pause();
+                playBtn.textContent = '▶';
+            }
+        });
+
+        audio.addEventListener('timeupdate', () => {
+            const { currentTime, duration } = audio;
+            const progressPercent = (currentTime / duration) * 100;
+            progress.style.width = `${progressPercent}%`;
+
+            const mins = Math.floor(currentTime / 60);
+            const secs = Math.floor(currentTime % 60).toString().padStart(2, '0');
+            currentTimeEl.textContent = `${mins}:${secs}`;
+        });
+
+        audio.addEventListener('loadedmetadata', () => {
+            const mins = Math.floor(audio.duration / 60);
+            const secs = Math.floor(audio.duration % 60).toString().padStart(2, '0');
+            durationEl.textContent = `${mins}:${secs}`;
+        });
+
+        progressContainer.addEventListener('click', (e) => {
+            const width = progressContainer.clientWidth;
+            const clickX = e.offsetX;
+            const duration = audio.duration;
+            audio.currentTime = (clickX / width) * duration;
+        });
+
+        audio.addEventListener('ended', () => {
+            audio.currentTime = 0;
+            playBtn.textContent = '▶';
+        });
+    </script>
+    {% endif %}
+<div class='track_list'>
+    {% for track in audios_list %}
+    <div class="track_item">{{ track|safe }}</div><br>
+    {% endfor %}
+</div>
+</body>
+</html>
