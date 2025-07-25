@@ -1,0 +1,316 @@
+{% extends 'base.html' %}
+
+{% block title %}{% endblock %}
+
+{% block description %}{% endblock %}
+
+{% block content %}
+<script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+<style>
+    body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f1f1f1;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+    .track_list {
+        width: 100%;
+        max-width: 600px;
+        background: white;
+        border-radius: 10px;
+        padding: 0;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-top: 20px;
+        overflow: hidden;
+    }
+
+    .track_item {
+        padding: 12px 15px;
+        transition: all 0.2s ease;
+        border-bottom: 1px solid #f0f0f0;
+        display: block;
+    }
+
+    .track_item:hover {
+        background-color: #f9f9f9;
+    }
+
+    .track_item:last-child {
+        border-bottom: none;
+    }
+
+    .track_item a {
+        display: flex;
+        align-items: center;
+        text-decoration: none;
+        color: #333;
+    }
+
+    .track_item img {
+        width: 40px;
+        height: 40px;
+        border-radius: 4px;
+        object-fit: cover;
+        margin-right: 15px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .track_info {
+        flex-grow: 1;
+        overflow: hidden;
+    }
+
+    .track_title {
+        font-weight: 500;
+        font-size: 14px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-bottom: 2px;
+    }
+
+    .track_artist {
+        font-size: 12px;
+        color: #666;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .track_duration {
+        font-size: 12px;
+        color: #999;
+        margin-left: 15px;
+        min-width: 40px;
+        text-align: right;
+    }
+
+    .now_playing {
+        background-color: #fff0f0;
+        border-left: 3px solid #ff4d4d;
+    }
+    .search-section {
+        margin-top: 50px;
+        padding: 20px;
+        max-width: 800px;
+        text-align: center;
+    }
+
+    .search-container h2 {
+        margin-bottom: 20px;
+        font-size: 24px;
+        color: #333;
+    }
+
+    .search-form {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .search-form input[type="text"] {
+        flex-grow: 1;
+        padding: 12px 16px;
+        border: 1px solid #ccc;
+        border-radius: 8px;
+        margin-right: 10px;
+        font-size: 16px;
+        outline: none;
+        transition: border-color 0.2s;
+    }
+
+    .search-form input[type="text"]:focus {
+        border-color: #4070f4; /* Цвет рамки при фокусе */
+    }
+
+    .search-form button {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        background: #4070f4;
+        color: white;
+        font-size: 16px;
+        cursor: pointer;
+        transition: background 0.3s;
+    }
+
+    .search-form button:hover {
+        background: #005bb5; /* Цвет фона кнопки при наведении */
+    }
+
+    .buttons {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+    }
+    .play-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: #ff4d4d;
+        border: none;
+        color: white;
+        font-size: 10px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        margin: 0 15px;
+    }
+    .prev-btn, .next-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        color: #666;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .mini-player-info {
+        max-width: 200px;
+    }
+
+
+</style>
+<section class="search-section">
+    <div class="search-container">
+        <h2>Поиск музыки</h2>
+        <form action="/search" method="POST" class="search-form">
+            <input type="text" name="zapros" placeholder="Введите название трека или исполнителя" required />
+            <button type="submit">Поиск</button>
+        </form>
+    </div>
+</section>
+
+{% if searched_tracks_list %}
+    <div class='track_list'>
+        {% for track in searched_tracks_list %}
+        <div class="track_item {% if q and track.find(q) != -1 %}now_playing{% endif %}">
+            {{ track|safe }}
+        </div>
+        {% endfor %}
+    </div>
+{% endif %}
+
+<video id="player" style="display: none;"></video>
+
+{% if url %}
+<!-- Мини-плеер -->
+<div class="mini-player">
+    <div class="mini-player-progress" id="progress-container">
+        <div class="mini-player-progress-bar" id="mini-progress"></div>
+    </div>
+    <img src="static/default_track.jpg" class="mini-player-cover" id="mini-cover">
+    <div class="mini-player-info">
+        <div class="mini-player-title" id="mini-title">{{ title }}</div>
+        <div class="mini-player-artist" id="mini-artist">{{ artist }}</div>
+    </div>
+    <div class="time">
+                <span id="current-time">0:00</span>
+                <span id="duration">3:45</span>
+            </div>
+    <div class="buttons">
+                <a href="/search/{{ prev_track_id }}"><button class="prev-btn">⏮</button></a>
+                <button class="play-btn" id="play-btn">▶</button>
+                <a href="/search/{{ next_track_id }}"><button class="next-btn">⏭</button></a>
+            </div>
+</div>
+{% endif %}
+
+<script>
+    const audio = document.getElementById('player');
+    const playBtn = document.getElementById('play-btn');
+    const progress = document.getElementById('mini-progress');
+    const progressContainer = document.getElementById('mini-progress-container');
+    const currentTimeEl = document.getElementById('current-time');
+    const durationEl = document.getElementById('duration');
+    const coverEl = document.getElementById('mini-cover');
+    const titleEl = document.getElementById('mini-title');
+    const artistEl = document.getElementById('mini-artist');
+
+    // Обновляем информацию о треке
+    titleEl.textContent = "{{ title|default('Название трека') }}";
+    artistEl.textContent = "{{ artist|default('Исполнитель') }}";
+    coverEl.src = "{{ photo }}";
+
+    const hlsUrl = "{{ url }}";
+    if (hlsUrl) {
+        if (Hls.isSupported()) {
+            const hls = new Hls();
+            hls.loadSource(hlsUrl);
+            hls.attachMedia(audio);
+            playBtn.textContent = '❚❚';
+            hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                audio.play().catch(e => {
+                    console.log('Автовоспроизведение заблокировано:', e);
+                    playBtn.textContent = '▶';
+                });
+            });
+            hls.on(Hls.Events.ERROR, (event, data) => {
+                console.error('Ошибка:', data);
+            });
+        } else if (audio.canPlayType('application/vnd.apple.mpegurl')) {
+            audio.src = hlsUrl;
+            playBtn.textContent = '❚❚';
+            audio.addEventListener('loadedmetadata', () => {
+                audio.play().catch(e => {
+                    console.log('Автовоспроизведение заблокировано:', e);
+                    playBtn.textContent = '▶';
+                });
+            });
+        }
+    }
+
+    playBtn.addEventListener('click', () => {
+        if (audio.paused) {
+            audio.play().then(() => {
+                playBtn.textContent = '❚❚';
+            }).catch(e => {
+                console.log('Ошибка воспроизведения:', e);
+            });
+        } else {
+            audio.pause();
+            playBtn.textContent = '▶';
+        }
+    });
+
+    audio.addEventListener('timeupdate', () => {
+        if (audio.duration) {
+            const progressPercent = (audio.currentTime / audio.duration) * 100;
+            progress.style.width = `${progressPercent}%`;
+
+            const mins = Math.floor(audio.currentTime / 60);
+            const secs = Math.floor(audio.currentTime % 60).toString().padStart(2, '0');
+            currentTimeEl.textContent = `${mins}:${secs}`;
+        }
+    });
+
+    audio.addEventListener('loadedmetadata', () => {
+        if (audio.duration) {
+            const mins = Math.floor(audio.duration / 60);
+            const secs = Math.floor(audio.duration % 60).toString().padStart(2, '0');
+            durationEl.textContent = `${mins}:${secs}`;
+        }
+    });
+
+    progressContainer.addEventListener('click', (e) => {
+        const width = progressContainer.clientWidth;
+        const clickX = e.offsetX;
+        if (audio.duration) {
+            audio.currentTime = (clickX / width) * audio.duration;
+        }
+    });
+
+    audio.addEventListener('ended', () => {
+        {% if next_track_id != None %}
+        window.location.href = '/search/{{ next_track_id }}';
+        {% else %}
+        audio.currentTime = 0;
+        playBtn.textContent = '▶';
+        {% endif %}
+    });
+</script>
+{% endblock %}

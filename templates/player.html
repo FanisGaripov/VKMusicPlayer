@@ -237,12 +237,11 @@
     </style>
 </head>
 <body>
-    {% if url != None %}
     <div class="player">
-        {% if photo %}
+        {% if photo != '[]' %}
         <div class="cover" style="background-image: url({{ photo[0] }});"></div>
-        {% else %}
-        <div class="cover" style="background-image: url(static/default_track.jpg);">Нет фото</div>
+        {% elif photo == '[]' or photo == None %}
+        <div class="cover">Нет фото</div>
         {% endif %}
         <div class="info">
             <div class="title">{{ title }}</div>
@@ -325,16 +324,12 @@
         });
 
         audio.addEventListener('ended', () => {
-            if (isRandom) {
-                playRandomTrack();
-            } else {
-                {% if next_track_id != None %}
-                window.location.href = '/{{ next_track_id }}';
-                {% elif next_track_id == None %}
-                audio.currentTime = 0;
-                playBtn.textContent = '▶';
-                {% endif %}
-            }
+            {% if next_track_id != None %}
+            window.location.href = '/{{ next_track_id }}'
+            {% elif next_track_id == None %}
+            audio.currentTime = 0;
+            playBtn.textContent = '▶';
+            {% endif %}
         });
     </script>
     <script>
@@ -390,74 +385,6 @@
             playBtn.textContent = '▶';
         });
     </script>
-    {% elif url == None %}
-    <style>
-        .track_list {
-            margin-top: 70px;
-        }
-    </style>
-    {% endif %}
-    <div class='track_list'>
-        {% for track in audios_list %}
-        <div class="track_item {% if q and track.find(q) != -1 %}now_playing{% endif %}">
-            {{ track|safe }}
-        </div>
-        {% endfor %}
-    </div>
-<button class="scroll-to-top" onclick="scrollToTop()">↑</button>
-
-<script>
-    // Показать кнопку при прокрутке
-    window.onscroll = function() {
-        const button = document.querySelector('.scroll-to-top');
-        if (document.body.scrollTop > 100 || document.documentElement.scrollTop > 100) {
-            button.style.display = 'block';
-        } else {
-            button.style.display = 'none';
-        }
-    };
-
-    // Функция прокрутки к верху страницы
-    function scrollToTop() {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-</script>
-<style>
-    .scroll-to-top {
-        position: fixed;
-        bottom: 20px;
-        right: 20px;
-        background-color: #3498db;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        padding: 10px 15px;
-        cursor: pointer;
-        display: none;
-        transition: background-color 0.3s;
-    }
-    .scroll-to-top:hover {
-        background-color: #2980b9;
-    }
-</style>
-<button class="download-more" onclick="location.reload(); return false;">Загрузить ещё</button>
-<style>
-    .download-more {
-        margin-top: 10px;
-        bottom: 20px;
-        right: 20px;
-        background-color: #3498db;
-        color: white;
-        border: none;
-        border-radius: 5px;
-        padding: 10px 15px;
-        cursor: pointer;
-        transition: background-color 0.3s;
-    }
-    .download-more:hover {
-        background-color: #2980b9;
-    }
-</style>
 <script>
     const repeatBtn = document.getElementById('repeat-btn');
     let isRepeat = false;
@@ -474,45 +401,6 @@
             repeatBtn.innerHTML = '<i class="bx bx-repeat icon"></i>';
         }
     });
-</script>
-<script>
-    const randomBtn = document.getElementById('random-btn');
-    let isRandom = localStorage.getItem('randomMode') === 'true' || false;
-
-    // Установка начального состояния кнопки
-    updateRandomButton();
-
-    randomBtn.addEventListener('click', () => {
-        isRandom = !isRandom;
-        localStorage.setItem('randomMode', isRandom);
-        updateRandomButton();
-
-        // Если включаем режим рандома, сразу запускаем случайный трек
-        if (isRandom) {
-            playRandomTrack();
-        }
-    });
-
-    function updateRandomButton() {
-        if (isRandom) {
-            randomBtn.classList.add('active');
-            randomBtn.innerHTML = '<i style="color: #ff4d4d;" class="fa fa-random" aria-hidden="true"></i>';
-        } else {
-            randomBtn.classList.remove('active');
-            randomBtn.innerHTML = '<i class="fa fa-random" aria-hidden="true"></i>';
-        }
-    }
-
-    async function playRandomTrack() {
-        try {
-            const response = await fetch('/random_track_from_playlist');
-            if (response.redirected) {
-                window.location.href = response.url;
-            }
-        } catch (error) {
-            console.error('Error fetching random track:', error);
-        }
-    }
 </script>
 </body>
 {% endblock %}
