@@ -20,6 +20,8 @@ from random import randint
 from vk_api.exceptions import Captcha, AuthError
 from vk_api.utils import enable_debug_mode
 import asyncio
+from concurrent.futures import Future
+from threading import Condition
 
 #
 # if sys.platform == "win32":
@@ -38,14 +40,8 @@ auth_code = ''
 login = ''
 password = ''
 app.secret_key = 'supersecretkey'
-captcha_data = {
-    'key': None,
-    'ready': False
-}
-auth_data = {
-    'code': None,
-    'ready': False
-}
+auth_condition = Condition()
+captcha_condition = Condition()
 
 
 def init_auth_file():
@@ -57,50 +53,42 @@ init_auth_file()
 auth_event = Event()
 
 
-async def handle_auth():
-    global see_code, auth_data
-    while see_code and auth_data['ready'] == False:
-        await asyncio.sleep(0.1)
-    return auth_data['code']
-
-
-async def handle_captcha():
-    global see_captcha, captcha_data
-    while see_captcha and captcha_data['ready'] == False:
-        await asyncio.sleep(0.1)
-    return captcha_data['captcha']
-
+# async def handle_auth():
+#     global see_code, auth_data
+#     while auth_data['ready'] == False:
+#         await asyncio.sleep(0.1)
+#         print('ЖДУ КОД')
+#     code = auth_data['code']
+#     print(f'ВОТ КОД: {code}')
+#     return auth_data['code']
+#
+#
+# async def handle_captcha():
+#     global see_captcha, captcha_data
+#     print('Вызвался хэндлер капчи')
+#     while captcha_data['ready'] == False:
+#         await asyncio.sleep(0.1)
+#         print('ЖДУ КАПЧУ')
+#     captcha = captcha_data['captcha']
+#     print(f'ВОТ КОД: {captcha}')
+#     return captcha_data['captcha']
 
 
 def authorization():
-    global see_code, auth_code, auth_data
-    see_code = True
-    print('Требуется код двухфакторной аутентификации')
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    code = asyncio.run_coroutine_threadsafe(handle_auth(), loop)
-    return code, True
-
+    global see_code, auth_code
+    with auth_condition:
+        see_code = True
+        auth_condition.wait()
+        return auth_code, True
 
 def captcha_handler(captcha):
-    global see_captcha, captcha_sid, captcha_url, captcha_data
-    see_captcha = True
-    print('Требуется ввод капчи')
-    if hasattr(captcha, 'redirect_uri'):
-        captcha_url = captcha.redirect_uri
-    else:
-        # Формируем URL капчи вручную, если redirect_uri недоступен
+    global see_captcha, captcha_sid, captcha_url, captcha_key
+    with captcha_condition:
+        see_captcha = True
+        captcha_sid = captcha.sid
         captcha_url = f"https://api.vk.com/captcha.php?sid={captcha.sid}&s=1"
-
-    print(f"Капча доступна по URL: {captcha_url}")
-    captcha_sid = captcha.sid
-    captcha_url = f"https://vk.com/captcha.php?sid={captcha.sid}&s=1"
-    '''http:\/\/api.vk.com\/captcha.php?sid=239633676097&s=1&v={int(time.time())}'''
-    print(captcha_url)
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    key = asyncio.run_coroutine_threadsafe(handle_captcha(), loop)
-    return captcha.try_again(key)
+        captcha_condition.wait()
+        return captcha.try_again(captcha_key)
 
 
 def enable_captcha_support(session):
@@ -124,7 +112,6 @@ def login_to_acc(login, password):
             captcha_handler=captcha_handler,
             app_id=2685278
         )
-        enable_debug_mode(vk_session, print_content=True)
         enable_captcha_support(vk_session)
 
         print('Пытаюсь авторизоваться')
@@ -274,15 +261,10 @@ def captcha():
 
     if request.method == 'POST':
         captcha_key = request.form.get('captcha_key')
-        if not captcha_key:
-            return render_template('captcha.html',
-                                   captcha_url=captcha_url,
-                                   error="Пожалуйста, введите капчу")
 
-        # Сохраняем ключ и разблокируем handler
-        captcha_data['key'] = captcha_key
-        captcha_data['ready'] = True
-        see_captcha = False
+        with captcha_condition:
+            see_captcha = False
+            captcha_condition.notify()
 
         return redirect('/')
 
@@ -295,10 +277,9 @@ def auth_code():
 
     if request.method == 'POST':
         auth_code = request.form.get('code')
-
-        auth_data['code'] = auth_code
-        auth_data['ready'] = True
-        see_code = False
+        with auth_condition:
+            see_code = False
+            auth_condition.notify()
 
         return redirect('/')
 
@@ -322,8 +303,6 @@ def login():
         auth_thread2 = Thread(target=login_to_acc, args=(login, password))
         auth_thread2.daemon = True
         auth_thread2.start()
-        auth_thread2.join()
-        time.sleep(1)
         print('Перед выбором...')
         print(f'Код:{see_code}, Капча:{see_captcha}, Логин:{see_login}')
         if see_code:
